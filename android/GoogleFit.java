@@ -25,6 +25,7 @@ import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
+import com.google.android.gms.common.api.Status;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
