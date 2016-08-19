@@ -380,12 +380,22 @@ public class GoogleFit extends CordovaPlugin {
                     @Override
                     public void onResult(DataReadResult dataReadResult) {
 
-                        if (dataReadResult.getBuckets().size() > 0) {
-                            callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
-                        } else if (dataReadResult.getDataSets().size() > 0) {
-                            callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
-                        } else {
-                            callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                        try {
+                            if (dataReadResult.getBuckets().size() > 0) {
+                                callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
+                            } else if (dataReadResult.getDataSets().size() > 0) {
+                                callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
+                            } else {
+                                //String strResult = dataReadResult.toString()
+                                String statusMessage = dataReadResult.getStatusMessage();
+                                int statusCode = dataReadResult.getStatusCode();
+                                //callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                                callbackContext.error("statusCode: "+statusCode+" statusMessage: "+statusMessage); // Thread-safe.
+                                //callbackContext.error(statusMessage); // Thread-safe.
+                            }
+                        }
+                        catch (Exception ex) {
+                            callbackContext.error("Exception : "+ex.toString());
                         }
                     }
                 });
