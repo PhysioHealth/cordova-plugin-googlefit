@@ -20,6 +20,7 @@ import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
+import com.google.android.gms.fitness.data.DataSource;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataReadRequest;
@@ -159,6 +160,9 @@ public class GoogleFit extends CordovaPlugin {
         mClient = new GoogleApiClient.Builder(appContext)
             .addApi(Fitness.HISTORY_API)
             .addScope(new Scope(Scopes.FITNESS_ACTIVITY_READ_WRITE))
+            .addScope(new Scope(Scopes.FITNESS_BODY_READ_WRITE))
+            .addScope(new Scope(Scopes.FITNESS_LOCATION_READ_WRITE))
+            .addScope(new Scope(Scopes.FITNESS_NUTRITION_READ_WRITE))
             .addConnectionCallbacks(
                 new GoogleApiClient.ConnectionCallbacks() {
                     @Override
@@ -278,8 +282,8 @@ public class GoogleFit extends CordovaPlugin {
     @Override
     public boolean execute(String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
-        // Select the getStuff2: get Buckets+Datasets+Datapoints from GoogleFit according to the query parameters
-        if ("getStuff2".equals(action)) {
+        // Select the getAggregateData: get Buckets+Datasets+Datapoints from GoogleFit according to the query parameters
+        if ("getAggregateData".equals(action)) {
             long st = args.getJSONObject(0).getLong("startTime");
             long et = args.getJSONObject(0).getLong("endTime");
             List<DataType> dt = JSON2DataType(args.getJSONObject(0).getJSONArray("datatypes"));
@@ -291,8 +295,8 @@ public class GoogleFit extends CordovaPlugin {
             cordova.getThreadPool().execute(new GetStuff(queryDataWithBuckets(st, et, dt, dta, du, tu, tb), callbackContext));
         }
 
-        // Select the getStuff1: get Datasets+Datapoints from GoogleFit according to the query parameters
-        if ("getStuff1".equals(action)) {
+        // Select the getData: get Datasets+Datapoints from GoogleFit according to the query parameters
+        if ("getData".equals(action)) {
 
             long st = args.getJSONObject(0).getLong("startTime");
             long et = args.getJSONObject(0).getLong("endTime");
@@ -348,12 +352,22 @@ public class GoogleFit extends CordovaPlugin {
                     @Override
                     public void onResult(DataReadResult dataReadResult) {
 
-                        if (dataReadResult.getBuckets().size() > 0) {
-                            callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
-                        } else if (dataReadResult.getDataSets().size() > 0) {
-                            callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
-                        } else {
-                            callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                        try {
+                            if (dataReadResult.getBuckets().size() > 0) {
+                                callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
+                            } else if (dataReadResult.getDataSets().size() > 0) {
+                                callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
+                            } else {
+                                //String strResult = dataReadResult.toString()
+                                String statusMessage = dataReadResult.getStatusMessage();
+                                int statusCode = dataReadResult.getStatusCode();
+                                //callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                                callbackContext.error("statusCode: "+statusCode+" statusMessage: "+statusMessage); // Thread-safe.
+                                //callbackContext.error(statusMessage); // Thread-safe.
+                            }
+                        }
+                        catch (Exception ex) {
+                            callbackContext.error("Exception : "+ex.toString());
                         }
                     }
                 });
@@ -421,7 +435,9 @@ public class GoogleFit extends CordovaPlugin {
 
             try {
                 dataPoint_JSON.put("type", dp.getDataType().getName());
-                dataPoint_JSON.put("source", dp.getDataSource());
+                DataSource dataSource = dp.getOriginalDataSource();
+                String appPkgName = dataSource.getAppPackageName();
+                dataPoint_JSON.put("source", appPkgName);
                 dataPoint_JSON.put("start", dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
                 dataPoint_JSON.put("end", dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
 

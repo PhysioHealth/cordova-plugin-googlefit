@@ -20,6 +20,7 @@ import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
+import com.google.android.gms.fitness.data.DataSource;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataReadRequest;
@@ -47,6 +48,8 @@ import java.util.concurrent.TimeUnit;
  * a user with Google Play Services and how to properly represent data in a {@link DataSet}.
  */
 public class GoogleFit extends CordovaPlugin {
+    
+    public static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1340;
     public static final String TAG = "cv-pl-googlefit";
     public static final int REQUEST_OAUTH = 1;
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
@@ -60,6 +63,8 @@ public class GoogleFit extends CordovaPlugin {
     private boolean authInProgress = false;
     public GoogleApiClient mClient = null;
     private CallbackContext savedCallbackContext;
+    private String savedAction;
+    private JSONArray savedArgs;
 
     private Activity actContext;
     private Context appContext;
@@ -275,34 +280,61 @@ public class GoogleFit extends CordovaPlugin {
      * @return
      * @throws JSONException
      */
+    
     @Override
     public boolean execute(String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-
-        // Select the getStuff2: get Buckets+Datasets+Datapoints from GoogleFit according to the query parameters
-        if ("getStuff2".equals(action)) {
-            long st = args.getJSONObject(0).getLong("startTime");
-            long et = args.getJSONObject(0).getLong("endTime");
-            List<DataType> dt = JSON2DataType(args.getJSONObject(0).getJSONArray("datatypes"));
-            List<DataType> dta = JSON2DataType(args.getJSONObject(0).getJSONArray("dataaggregations"));
-            int du = args.getJSONObject(0).getInt("durationBucket");
-            TimeUnit tu = JSON2TimeUnit(args.getJSONObject(0).getString("timeUnitBucket"));
-            int tb = args.getJSONObject(0).getInt("typeBucket");
-
-            cordova.getThreadPool().execute(new GetStuff(queryDataWithBuckets(st, et, dt, dta, du, tu, tb), callbackContext));
-        }
-
-        // Select the getStuff1: get Datasets+Datapoints from GoogleFit according to the query parameters
-        if ("getStuff1".equals(action)) {
-
-            long st = args.getJSONObject(0).getLong("startTime");
-            long et = args.getJSONObject(0).getLong("endTime");
-            JSONArray _dt = args.getJSONObject(0).getJSONArray("datatypes");
-            List<DataType> dt = JSON2DataType(_dt);
-
-            cordova.getThreadPool().execute( new GetStuff(queryData(st, et, dt), callbackContext));
-        }
-
+        this.savedArgs = args;
+        this.savedAction = action;
+        this.savedCallbackContext = callbackContext;
+    
+        checkLocationPermission();
         return true;  // Returning false will result in a "MethodNotFound" error.
+    }
+
+    public void getAllStuffs() throws JSONException{
+        // Select the getAggregateData: get Buckets+Datasets+Datapoints from GoogleFit according to the query parameters
+        if ("getAggregateData".equals(this.savedAction)) {
+            long st = this.savedArgs.getJSONObject(0).getLong("startTime");
+            long et = this.savedArgs.getJSONObject(0).getLong("endTime");
+            List<DataType> dt = JSON2DataType(this.savedArgs.getJSONObject(0).getJSONArray("datatypes"));
+            List<DataType> dta = JSON2DataType(this.savedArgs.getJSONObject(0).getJSONArray("dataaggregations"));
+            int du = this.savedArgs.getJSONObject(0).getInt("durationBucket");
+            TimeUnit tu = JSON2TimeUnit(this.savedArgs.getJSONObject(0).getString("timeUnitBucket"));
+            int tb = this.savedArgs.getJSONObject(0).getInt("typeBucket");
+    
+            cordova.getThreadPool().execute(new GetStuff(queryDataWithBuckets(st, et, dt, dta, du, tu, tb), this.savedCallbackContext));
+        }
+    
+    
+        // Select the getData: get Datasets+Datapoints from GoogleFit according to the query parameters
+        if ("getData".equals(this.savedAction)) {
+            long st = this.savedArgs.getJSONObject(0).getLong("startTime");
+            long et = this.savedArgs.getJSONObject(0).getLong("endTime");
+            JSONArray _dt = this.savedArgs.getJSONObject(0).getJSONArray("datatypes");
+            List<DataType> dt = JSON2DataType(_dt);
+    
+            cordova.getThreadPool().execute( new GetStuff(queryData(st, et, dt), this.savedCallbackContext));
+        }
+    }
+
+    public void  checkLocationPermission(){
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(actContext,Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(actContext,new String[]{Manifest.permission.ACCESS_FINE_LOCATION},MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION);
+            } else {
+                try{
+                    getAllStuffs();
+                } catch (Exception e){
+                    Log.e("Exception", "Error while getting Fitness details");
+                }
+            }
+        } else {
+            try{
+                getAllStuffs();
+            } catch (Exception e){
+                Log.e("Exception", "Error while getting Fitness details");
+            }
+        }
     }
 
     /**
@@ -348,12 +380,22 @@ public class GoogleFit extends CordovaPlugin {
                     @Override
                     public void onResult(DataReadResult dataReadResult) {
 
-                        if (dataReadResult.getBuckets().size() > 0) {
-                            callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
-                        } else if (dataReadResult.getDataSets().size() > 0) {
-                            callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
-                        } else {
-                            callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                        try {
+                            if (dataReadResult.getBuckets().size() > 0) {
+                                callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
+                            } else if (dataReadResult.getDataSets().size() > 0) {
+                                callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
+                            } else {
+                                //String strResult = dataReadResult.toString()
+                                String statusMessage = dataReadResult.getStatusMessage();
+                                int statusCode = dataReadResult.getStatusCode();
+                                //callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                                callbackContext.error("statusCode: "+statusCode+" statusMessage: "+statusMessage); // Thread-safe.
+                                //callbackContext.error(statusMessage); // Thread-safe.
+                            }
+                        }
+                        catch (Exception ex) {
+                            callbackContext.error("Exception : "+ex.toString());
                         }
                     }
                 });
@@ -421,7 +463,9 @@ public class GoogleFit extends CordovaPlugin {
 
             try {
                 dataPoint_JSON.put("type", dp.getDataType().getName());
-                dataPoint_JSON.put("source", dp.getDataSource());
+                DataSource dataSource = dp.getOriginalDataSource();
+                String appPkgName = dataSource.getAppPackageName();
+                dataPoint_JSON.put("source", appPkgName);
                 dataPoint_JSON.put("start", dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
                 dataPoint_JSON.put("end", dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
 
