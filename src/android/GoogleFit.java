@@ -24,6 +24,7 @@ import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
+import com.google.android.gms.common.api.Status;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
@@ -348,12 +349,28 @@ public class GoogleFit extends CordovaPlugin {
                     @Override
                     public void onResult(DataReadResult dataReadResult) {
 
-                        if (dataReadResult.getBuckets().size() > 0) {
-                            callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
-                        } else if (dataReadResult.getDataSets().size() > 0) {
-                            callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
-                        } else {
-                            callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                        try {
+                            if (dataReadResult.getBuckets().size() > 0) {
+                                callbackContext.success(convertBucketsToJson(dataReadResult.getBuckets())); // Thread-safe.
+                            } else if (dataReadResult.getDataSets().size() > 0) {
+                                callbackContext.success(convertDatasetsToJson(dataReadResult.getDataSets())); // Thread-safe.
+                            } else {
+                                String strResult = "";
+                                try {
+                                    strResult = dataReadResult.toString();
+                                } catch (Exception ex) {
+                                    strResult = ex.toString();
+                                }
+                                Status status = dataReadResult.getStatus();
+                                String statusMessage = status.getStatusMessage();
+                                int statusCode = status.getStatusCode();
+                                //callbackContext.error("No dataset and no buckets."); // Thread-safe.
+                                callbackContext.error("statusCode: "+statusCode+" statusMessage: "+statusMessage+ " result:"+strResult); // Thread-safe.
+                                //callbackContext.error(statusMessage); // Thread-safe.
+                            }
+                        }
+                        catch (Exception ex) {
+                            callbackContext.error("Exception : "+ex.toString());
                         }
                     }
                 });
